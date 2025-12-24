@@ -5,37 +5,50 @@ on:
   schedule:
     - cron: '0 */6 * * *'
 
+# 🔒 Impede dois jobs ao mesmo tempo
+concurrency:
+  group: bitloteria
+  cancel-in-progress: false
+
 jobs:
   search:
     runs-on: ubuntu-latest
+
     permissions:
-      contents: write # ESSENCIAL: Permite salvar no repositório
-    
+      contents: write
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repositório
+        uses: actions/checkout@v4
         with:
           persist-credentials: true
+          fetch-depth: 0   # IMPORTANTE para pull --rebase funcionar
 
-      - name: Instalar Node.js
+      - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Instalar Libs
+      - name: Instalar dependências
         run: npm install secp256k1
 
-      - name: Executar Busca
+      - name: Executar busca
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         timeout-minutes: 345
-        run: node fast-loteria.js || echo "Tempo esgotado, salvando..."
+        run: |
+          node fast-loteria.js || echo "⏱️ Timeout atingido, salvando progresso..."
 
       - name: Commit e Push do Progresso
-        if: always() # Salva mesmo se o script falhar ou parar por tempo
+        if: always()
         run: |
           git config --global user.name "GitHub Action Bot"
           git config --global user.email "action@github.com"
+
           git add last_key.txt
           git commit -m "Update progresso: $(cat last_key.txt)" || exit 0
-          git push
+
+          # 🔄 Sincroniza com o remoto antes de enviar
+          git pull --rebase origin main
+          git push origin main
